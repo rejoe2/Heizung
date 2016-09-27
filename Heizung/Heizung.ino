@@ -32,7 +32,8 @@
 */
 
 // Enable debug prints to serial monitor
-#define MY_DEBUG
+//#define MY_DEBUG
+#define MY_DEBUG_LOCAL
 
 // Enable and select radio type attached
 #define MY_RADIO_NRF24
@@ -65,8 +66,6 @@ boolean receivedConfig = false;
 boolean metric = true;
 // Initialize temperature message
 MyMessage DallasMsg(0, V_TEMP);
-int tempMaxPump = 37; //upper temp level at warmwater circle pump
-int tempMaxHeatingPump = 58; //temperature to switch internal heating pump to highest level
 int  resolution = 10;
 int  conversionTime = 0;
 
@@ -90,6 +89,12 @@ int RL = 3; //Rücklauf
 int VL = 4; //Vorlauf
 
 float lastTemperatureShort[MAX_ATTACHED_DS18B20];
+
+#define CHILD_ID_CONFIG 102   // Id of the sensor child
+//set defaults
+int tempMaxPump = 37; //upper temp level at warmwater circle pump
+int tempMaxHeatingPump = 58; //temperature to switch internal heating pump to highest level
+
 
 #define SERVO_DIGITAL_OUT_PIN 4
 #define SERVO_MIN 0 // Fine tune your servos min. 0-180
@@ -176,14 +181,10 @@ void setup() {
   attachInterrupt(SENSOR_INTERRUPT, onPulse, FALLING);
   lastSend = lastPulse = millis();
 
-  // Make sure relays are off when starting up
-  digitalWrite(RELAY_PIN, RELAY_OFF);
   // Then set relay pins in output mode
   pinMode(RELAY_PIN, OUTPUT);
-
-  // Set relay to last known state (using eeprom storage)
-  //state = loadState(CHILD_ID_RELAY);
-  //digitalWrite(RELAY_PIN, state?RELAY_ON:RELAY_OFF);
+  // Make sure relays are off when starting up
+  digitalWrite(RELAY_PIN, RELAY_OFF);
 
   // Startup up the OneWire library
   sensors.begin();
@@ -198,12 +199,14 @@ void presentation()  {
   present(CHILD_ID_SERVO, S_COVER);
   present(CHILD_ID_GAS, S_WATER);
   present(CHILD_ID_RELAY, S_LIGHT);
-
+  present(CHILD_ID_CONFIG, S_CUSTUM);
+  
   // Fetch the number of attached temperature sensors
   numSensors = sensors.getDeviceCount();
   // Present all sensors to controller
   for (int i = 0; i < numSensors && i < MAX_ATTACHED_DS18B20; i++) {
     present(20 + i, S_TEMP);
+	sensors.setResolution(dallasAddresses[i], resolution);
   }
 }
 
@@ -409,6 +412,7 @@ void loop()
 }
 
 void receive(const MyMessage &message) {
+  if (message.sensor == CHILD_ID_SERVO) {
   myservo.attach(SERVO_DIGITAL_OUT_PIN);
   attachedServo = true;
   if (message.isAck()) {
@@ -418,41 +422,55 @@ void receive(const MyMessage &message) {
     int val = message.getInt();
     myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
     // Write some debug info
-    Serial.print("Servo change; state: ");
-    Serial.println(val);
+    //Serial.print("Servo change; state: ");
+    //Serial.println(val);
   } else if (message.type == V_UP) {
-    Serial.println("Servo UP com.");
+    //Serial.println("Servo UP com.");
     myservo.write(SERVO_MIN);
     send(ServoMsg.set(100));
   } else if (message.type == V_DOWN) {
-    Serial.println("Servo DOWN com.");
+    //Serial.println("Servo DOWN com.");
     myservo.write(SERVO_MAX);
     send(ServoMsg.set(0));
   } else if (message.type == V_STOP) {
-    Serial.println("Servo STOP com.");
+    //Serial.println("Servo STOP com.");
     myservo.detach();
     attachedServo = false;
-
-  } else if (message.type == V_VAR1) {
-    unsigned long gwPulseCount = message.getULong();
-    pulseCount += gwPulseCount;
+}
+  }
+    else if (message.sensor == CHILD_ID_GAS) {
+	if (message.type == V_VAR1) {
+    PulseCount = message.getULong();
     flow = oldflow = 0;
-    Serial.print("Rec. last pulse count from gw:");
-    Serial.println(pulseCount);
+    //Serial.print("Rec. last pulse count from gw:");
+    //Serial.println(pulseCount);
     pcReceived = true;
-  } else if (message.type == V_LIGHT) {
+  }
+  }
+    else if (message.sensor == CHILD_ID_RELAY) {
+	
+  if (message.type == V_LIGHT) {
     // Change relay state
     state = message.getBool();
     digitalWrite(RELAY_PIN, state ? RELAY_ON : RELAY_OFF);
     // Store state in eeprom
     // saveState(CHILD_ID, state);
-
+#ifdef MY_DEBUG
     // Write some debug info
     Serial.print("Gw change relay:");
     Serial.print(message.sensor);
     Serial.print(", New status: ");
     Serial.println(message.getBool());
-  }
+#endif
+	}
+	}
+	else if (message.sensor == CHILD_ID_CONFIG) {
+if (message.type == V_VAR1) {
+    int tempMaxPump = message.getInt(); //upper temp level at warmwater circle pump
+	} else if (message.type == V_VAR2){
+	int tempMaxHeatingPump = message.getInt(); //temperature to switch internal heating pump to highest level
+	}
+	}
   timeOfLastChange = millis();
 }
 

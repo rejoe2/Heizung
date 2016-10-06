@@ -53,8 +53,8 @@
 
 #define ONE_WIRE_BUS 5 // Pin where dallas sensor is connected 
 #define MAX_ATTACHED_DS18B20 10
-unsigned long SLEEP_TIME = 90000; // Sleep time between reads (in milliseconds)
-unsigned long tempDelayShort = 2000; //Check cyclus for fast temperature rise
+unsigned long SLEEP_TIME = 300000; // Sleep time between reads (in milliseconds)
+unsigned long tempDelayShort = 7000; //Check cyclus for fast temperature rise
 unsigned long tempDelayPump = 30000; //Check cyclus for switching off warmwater circle pump
 unsigned long tempDelayHeatingPump = 45000; //Check cyclus for switching internal heating water pump
 
@@ -77,7 +77,7 @@ DeviceAddress dallasAddresses[] = {
   {0x28, 0xFF, 0x0, 0x4A, 0x54, 0x14, 0x1, 0xDF}, // Heizung Rücklauf 28.FF004A541401.DF
   {0x28, 0xFF, 0xC9, 0x97, 0x54, 0x14, 0x1, 0x92}, // Heizung Vorlauf 28.FFC997541401.92
   //{0x28, 0xFF, 0x7C, 0x3E, 0x54, 0x14, 0x01, 0x35}, //Testsensor 2
-  //{0x28, 0xCD, 0x1A, 0xE6, 0x5, 0x0, 0x0, 0x13}, // Aussentemperatur Nord DC1AE6050000.13
+  {0x28, 0xCD, 0x1A, 0xE6, 0x5, 0x0, 0x0, 0x13}, // Aussentemperatur Nord DC1AE6050000.13
   //{0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
   //{0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86
 };
@@ -87,7 +87,7 @@ int WW = 1; //binary # of warmwater sensor
 int WP = 2; //WarmWater Pump
 int RL = 3; //Rücklauf
 int VL = 4; //Vorlauf
-
+int AN = 5; //Außentemperatur Nord
 float lastTemperatureShort[MAX_ATTACHED_DS18B20];
 
 #define CHILD_ID_CONFIG 102   // Id of the sensor child
@@ -108,7 +108,7 @@ int tempMaxHeatingPump = 58; //temperature to switch internal heating pump to hi
 #define MAX_FLOW 100          // Max volume value to report. This filetrs outliers.
 #define SENSOR_INTERRUPT DIGITAL_INPUT_SENSOR-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 #define CHILD_ID_GAS 11              // Id of the sensor child
-unsigned long SEND_FREQUENCY = 30000; // Minimum time between send (in milliseconds). We don't wnat to spam the gateway.
+unsigned long SEND_FREQUENCY = 300000; // Minimum time between send (in milliseconds). We don't want to spam the gateway.
 
 #define RELAY_PIN  6  // Arduino Digital I/O pin number for relay 
 #define CHILD_ID_RELAY 1   // Id of the sensor child
@@ -121,7 +121,7 @@ Servo myservo;  // create servo object to control a servo
 // a maximum of eight servo objects can be created Sensor gw(9,10);
 unsigned long timeOfLastChange = 0;
 bool attachedServo = false;
-int val = 20;
+int val = 100;
 
 MyMessage flowMsg(CHILD_ID_GAS, V_FLOW);
 MyMessage volumeMsg(CHILD_ID_GAS, V_VOLUME);
@@ -200,13 +200,13 @@ void presentation()  {
   present(CHILD_ID_GAS, S_WATER);
   present(CHILD_ID_RELAY, S_LIGHT);
   present(CHILD_ID_CONFIG, S_CUSTUM);
-  
+
   // Fetch the number of attached temperature sensors
   numSensors = sensors.getDeviceCount();
   // Present all sensors to controller
   for (int i = 0; i < numSensors && i < MAX_ATTACHED_DS18B20; i++) {
     present(20 + i, S_TEMP);
-	sensors.setResolution(dallasAddresses[i], resolution);
+    sensors.setResolution(dallasAddresses[i], resolution);
   }
 }
 
@@ -232,10 +232,10 @@ void loop()
 
     if (!SLEEP_MODE && flow != oldflow) {
       oldflow = flow;
-
+#ifdef MY_DEBUG
       Serial.print("l/min:");
       Serial.println(flow);
-
+#endif
       // Check that we dont get unresonable large flow value.
       // could hapen when long wraps or false interrupt triggered
       if (flow < ((unsigned long)MAX_FLOW)) {
@@ -277,23 +277,51 @@ void loop()
   // sleep() call can be replaced by wait() call if node need to process incoming messages (or if node is repeater)
   wait(conversionTime);
 
-  //Loop for quick temperature rise warmwater
+  //Loop for quick temperature rise hot water and check for higher temperaturess of water exiting burner
   unsigned long currentMillisShort = millis();
   if (currentMillisShort - lastCheckWater > tempDelayShort) {
     // Fetch and round temperature to one decimal
     float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[WW]) : sensors.getTempF(dallasAddresses[WW])) * 10.)) / 10.;
     // switch Relay on, if temperature on warmwater pipe rises fast and temperature at circlepump is not already at upper level
-    if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperatureShort[WW] + 0.2 < temperature && temperature != -127.00 && lastTemperature[WW] < tempMaxPump) {
+    if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperatureShort[WW] + 0.3 < temperature && temperature != -127.00 && lastTemperature[WW] < tempMaxPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(WW + 20).set(temperature, 1));
       digitalWrite(RELAY_PIN, RELAY_ON);
       send(RelayMsg.set(true), true); // Send new state and request ack back
       // Write some debug info
+#ifdef MY_DEBUG
       Serial.print("Int. change:");
       Serial.print(temperature);
       Serial.print("C, Rel. status: ON");
       Serial.println();
+#endif
       lastTemperatureShort[WW] = temperature;
+    }
+    // Fetch and round temperature to one decimal
+    float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[HP]) : sensors.getTempF(dallasAddresses[HP])) * 10.)) / 10.;
+    // switch Relay on, if temperature on warmwater pipe rises fast and temperature at circlepump is not already at upper level
+    if (val > 20 && temperature != -127.00 && Temperature > tempMaxHeatingPump) {
+      // Send in the new temperature
+      send(DallasMsg.setSensor(HP + 20).set(temperature, 1));
+      myservo.attach(SERVO_DIGITAL_OUT_PIN);
+      attachedServo = true;
+      int val = 20;
+      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+      // Write some debug info
+      //Serial.print("Servo change; state: ");
+      //Serial.println(val);
+      myservo.detach();
+      attachedServo = false;
+
+      // Write some debug info
+#ifdef MY_DEBUG
+      Serial.print("Int. change:");
+      Serial.print(temperature);
+      Serial.print("C, Servo. status: ");
+      Serial.print(val);
+      Serial.println();
+#endif
+      lastTemperatureShort[HP] = temperature;
     }
     lastCheckWater = currentMillisShort;
   }
@@ -308,11 +336,13 @@ void loop()
       send(DallasMsg.setSensor(WP + 20).set(temperature, 1));
       digitalWrite(RELAY_PIN, RELAY_OFF);
       send(RelayMsg.set(false), true); // Send new state and request ack back
+#ifdef MY_DEBUG
       // Write some debug info
       Serial.print("Int. change:");
       Serial.print(temperature);
       Serial.print("C, Rel. status: OFF");
       Serial.println();
+#endif
       lastTemperatureShort[WP] = temperature;
     }
     lastCheckPump = currentMillisPump;
@@ -320,66 +350,70 @@ void loop()
   /*
     //Loop for switching internal heating pump
     unsigned long currentMillisHeatingPump = millis();
-     if (currentMillisHeatingPump - lastCheckHeatingPump > tempDelayHeatingPump ) {
-     float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric?sensors.getTempC(dallasAddresses[HP]):sensors.getTempF(dallasAddresses[HP])) * 10.)) / 10.;
-     // switch pump to Level 3, if temperature of heating water circle is at or higher upper level
-     if (val > 20 && tempMaxHeatingPump<temperature && temperature != -127.00 ) {
-       myservo.attach(SERVO_DIGITAL_OUT_PIN);
-       attachedServo = true;
-       val = 20;
-       myservo.write(SERVO_MAX + (SERVO_MIN-SERVO_MAX)/100 * val); // sets the servo position 0-180
-       // Write some debug info
-       Serial.print("Servo change; state: ");
-       Serial.println(val);
+    if (currentMillisHeatingPump - lastCheckHeatingPump > tempDelayHeatingPump ) {
+      float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[HP]) : sensors.getTempF(dallasAddresses[HP])) * 10.)) / 10.;
+      // switch pump to Level 3, if temperature of heating water circle is at or higher upper level
 
-       // Send in the new temperature
-       send(DallasMsg.setSensor(HP+20).set(temperature, 1));
-       send(ServoMsg.set(val), true); // Send new state and request ack back
-       // Write some debug info
-       Serial.print("Int. change:");
-       Serial.print(temperature);
-       lastTemperatureShort[HP] = temperature;
-       timeOfLastChange = currentMillisHeatingPump;
+      if (val > 20 && tempMaxHeatingPump < temperature && temperature != -127.00 ) {
+        myservo.attach(SERVO_DIGITAL_OUT_PIN);
+        attachedServo = true;
+        val = 20;
+        myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+    #ifdef MY_DEBUG
+        // Write some debug info
+        Serial.print("Servo change; state: ");
+        Serial.println(val);
+    #endif
+        // Send in the new temperature
+        send(DallasMsg.setSensor(HP + 20).set(temperature, 1));
+        send(ServoMsg.set(val), true); // Send new state and request ack back
+    #ifdef MY_DEBUG
+        // Write some debug info
+        Serial.print("Int. change:");
+        Serial.println(temperature);
+    #endif
+        lastTemperatureShort[HP] = temperature;
+        timeOfLastChange = currentMillisHeatingPump;
 
-       } else if (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] > DeltaL3 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
-       myservo.attach(SERVO_DIGITAL_OUT_PIN);
-       attachedServo = true;
-       val = 20;
-       myservo.write(SERVO_MAX + (SERVO_MIN-SERVO_MAX)/100 * val); // sets the servo position 0-180
-       send(ServoMsg.set(val), true); // Send new state and request ack back
-       // Write some debug info
-       Serial.print("Servo change; state: ");
-       Serial.println(val);
-       lastPumpSwitch = currentMillisHeatingPump;
-       timeOfLastChange = currentMillisHeatingPump;
-       } else if (lastTemperature[VL] - lastTemperature[RL] > DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
-       myservo.attach(SERVO_DIGITAL_OUT_PIN);
-       attachedServo = true;
-       val = 60;
-       myservo.write(SERVO_MAX + (SERVO_MIN-SERVO_MAX)/100 * val); // sets the servo position 0-180
-       send(ServoMsg.set(val), true); // Send new state and request ack back
-       // Write some debug info
-       Serial.print("Servo change; state: ");
-       Serial.println(val);
-       lastPumpSwitch = currentMillisHeatingPump;
-       timeOfLastChange = currentMillisHeatingPump;
+      } else if (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] > DeltaL3 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
+        myservo.attach(SERVO_DIGITAL_OUT_PIN);
+        attachedServo = true;
+        val = 20;
+        myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+        send(ServoMsg.set(val), true); // Send new state and request ack back
+        // Write some debug info
+        Serial.print("Servo change; state: ");
+        Serial.println(val);
+        lastPumpSwitch = currentMillisHeatingPump;
+        timeOfLastChange = currentMillisHeatingPump;
+      } else if (lastTemperature[VL] - lastTemperature[RL] > DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
+        myservo.attach(SERVO_DIGITAL_OUT_PIN);
+        attachedServo = true;
+        val = 60;
+        myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+        send(ServoMsg.set(val), true); // Send new state and request ack back
+        // Write some debug info
+        Serial.print("Servo change; state: ");
+        Serial.println(val);
+        lastPumpSwitch = currentMillisHeatingPump;
+        timeOfLastChange = currentMillisHeatingPump;
 
-       } else if (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] < DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
-       myservo.attach(SERVO_DIGITAL_OUT_PIN);
-       attachedServo = true;
-       val = 100;
-       myservo.write(SERVO_MAX + (SERVO_MIN-SERVO_MAX)/100 * val); // sets the servo position 0-180
-       send(ServoMsg.set(val), true); // Send new state and request ack back
-       // Write some debug info
-       Serial.print("Servo change; state: ");
-       Serial.println(val);
-       lastPumpSwitch = currentMillisHeatingPump;
-       timeOfLastChange = currentMillisHeatingPump;
+      } else if (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] < DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
+        myservo.attach(SERVO_DIGITAL_OUT_PIN);
+        attachedServo = true;
+        val = 100;
+        myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+        send(ServoMsg.set(val), true); // Send new state and request ack back
+        // Write some debug info
+        Serial.print("Servo change; state: ");
+        Serial.println(val);
+        lastPumpSwitch = currentMillisHeatingPump;
+        timeOfLastChange = currentMillisHeatingPump;
 
-       }
+      }
 
       lastCheckHeatingPump = currentMillisHeatingPump;
-      }
+    }
   */
   //Loop for regular temperature sensing
   unsigned long currentMillis = millis();
@@ -413,64 +447,68 @@ void loop()
 
 void receive(const MyMessage &message) {
   if (message.sensor == CHILD_ID_SERVO) {
-  myservo.attach(SERVO_DIGITAL_OUT_PIN);
-  attachedServo = true;
-  if (message.isAck()) {
-    Serial.println("Ack from gw rec.");
+    myservo.attach(SERVO_DIGITAL_OUT_PIN);
+    attachedServo = true;
+    if (message.isAck()) {
+      Serial.println("Ack from gw rec.");
+    }
+    if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
+      int val = message.getInt();
+      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+      // Write some debug info
+      //Serial.print("Servo change; state: ");
+      //Serial.println(val);
+    }
+    else if (message.type == V_UP) {
+      //Serial.println("Servo UP com.");
+      myservo.write(SERVO_MIN);
+      send(ServoMsg.set(100));
+    }
+    else if (message.type == V_DOWN) {
+      //Serial.println("Servo DOWN com.");
+      myservo.write(SERVO_MAX);
+      send(ServoMsg.set(0));
+    }
+    else if (message.type == V_STOP) {
+      //Serial.println("Servo STOP com.");
+      myservo.detach();
+      attachedServo = false;
+    }
   }
-  if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
-    int val = message.getInt();
-    myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
-    // Write some debug info
-    //Serial.print("Servo change; state: ");
-    //Serial.println(val);
-  } else if (message.type == V_UP) {
-    //Serial.println("Servo UP com.");
-    myservo.write(SERVO_MIN);
-    send(ServoMsg.set(100));
-  } else if (message.type == V_DOWN) {
-    //Serial.println("Servo DOWN com.");
-    myservo.write(SERVO_MAX);
-    send(ServoMsg.set(0));
-  } else if (message.type == V_STOP) {
-    //Serial.println("Servo STOP com.");
-    myservo.detach();
-    attachedServo = false;
-}
+  else if (message.sensor == CHILD_ID_GAS) {
+    if (message.type == V_VAR1) {
+      PulseCount = message.getULong();
+      flow = oldflow = 0;
+      //Serial.print("Rec. last pulse count from gw:");
+      //Serial.println(pulseCount);
+      pcReceived = true;
+    }
   }
-    else if (message.sensor == CHILD_ID_GAS) {
-	if (message.type == V_VAR1) {
-    PulseCount = message.getULong();
-    flow = oldflow = 0;
-    //Serial.print("Rec. last pulse count from gw:");
-    //Serial.println(pulseCount);
-    pcReceived = true;
-  }
-  }
-    else if (message.sensor == CHILD_ID_RELAY) {
-	
-  if (message.type == V_LIGHT) {
-    // Change relay state
-    state = message.getBool();
-    digitalWrite(RELAY_PIN, state ? RELAY_ON : RELAY_OFF);
-    // Store state in eeprom
-    // saveState(CHILD_ID, state);
+  else if (message.sensor == CHILD_ID_RELAY) {
+
+    if (message.type == V_LIGHT) {
+      // Change relay state
+      state = message.getBool();
+      digitalWrite(RELAY_PIN, state ? RELAY_ON : RELAY_OFF);
+      // Store state in eeprom
+      // saveState(CHILD_ID, state);
 #ifdef MY_DEBUG
-    // Write some debug info
-    Serial.print("Gw change relay:");
-    Serial.print(message.sensor);
-    Serial.print(", New status: ");
-    Serial.println(message.getBool());
+      // Write some debug info
+      Serial.print("Gw change relay:");
+      Serial.print(message.sensor);
+      Serial.print(", New status: ");
+      Serial.println(message.getBool());
 #endif
-	}
-	}
-	else if (message.sensor == CHILD_ID_CONFIG) {
-if (message.type == V_VAR1) {
-    int tempMaxPump = message.getInt(); //upper temp level at warmwater circle pump
-	} else if (message.type == V_VAR2){
-	int tempMaxHeatingPump = message.getInt(); //temperature to switch internal heating pump to highest level
-	}
-	}
+    }
+  }
+  else if (message.sensor == CHILD_ID_CONFIG) {
+    if (message.type == V_VAR1) {
+      int tempMaxPump = message.getInt(); //upper temp level at warmwater circle pump
+    }
+    else if (message.type == V_VAR2) {
+      int tempMaxHeatingPump = message.getInt(); //temperature to switch internal heating pump to highest level
+    }
+  }
   timeOfLastChange = millis();
 }
 

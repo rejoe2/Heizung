@@ -54,8 +54,8 @@
 
 #define ONE_WIRE_BUS 5 // Pin where dallas sensor is connected 
 #define MAX_ATTACHED_DS18B20 10
-unsigned long SLEEP_TIME = 300000; // Sleep time between reads (in milliseconds)
-unsigned long tempDelayShort = 7000; //Check cyclus for fast temperature rise
+unsigned long SLEEP_TIME = 180000; // Sleep time between reads (in milliseconds)
+unsigned long tempDelayShort = 10000; //Check cyclus for fast temperature rise
 unsigned long tempDelayPump = 30000; //Check cyclus for switching off warmwater circle pump
 unsigned long tempDelayHeatingPump = 45000; //Check cyclus for switching internal heating water pump
 
@@ -77,10 +77,9 @@ DeviceAddress dallasAddresses[] = {
   {0x28, 0xF9, 0x61, 0xE7, 0x5, 0x0, 0x0, 0xDC}, //{0x28, 0xF8, 0x24, 0xE5, 0x05, 0x0, 0x0, 0xDC}, // Warmwasser an der Umwälzpumpe 28.F961E7050000.DC
   {0x28, 0xFF, 0x0, 0x4A, 0x54, 0x14, 0x1, 0xDF}, // Heizung Rücklauf 28.FF004A541401.DF
   {0x28, 0xFF, 0xC9, 0x97, 0x54, 0x14, 0x1, 0x92}, // Heizung Vorlauf 28.FFC997541401.92
-  //{0x28, 0xFF, 0x7C, 0x3E, 0x54, 0x14, 0x01, 0x35}, //Testsensor 2
-  //{0x28, 0xCD, 0x1A, 0xE6, 0x5, 0x0, 0x0, 0x13}, // Aussentemperatur Nord DC1AE6050000.13
-  //{0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
-  //{0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86
+  {0x28, 0xCD, 0x1A, 0xE6, 0x5, 0x0, 0x0, 0x13}, // Aussentemperatur Nord DC1AE6050000.13
+  {0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
+  {0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86*/
 };
 
 int HP = 0; //Internal Heating Pump
@@ -175,19 +174,17 @@ void before() {
   sensors.setWaitForConversion(false);
   // Fetch the number of attached temperature sensors
   numSensors = sensors.getDeviceCount();
-}
+  }
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("Heating Environment", "0.7");
+  sendSketchInfo("Heating Environment", "0.8");
   // Register all sensors to gw (they will be created as child devices)
   present(CHILD_ID_SERVO, S_COVER);
   present(CHILD_ID_GAS, S_WATER);
   present(CHILD_ID_RELAY, S_LIGHT);
   present(CHILD_ID_CONFIG, S_CUSTOM);
 
-  // Fetch the number of attached temperature sensors
-  numSensors = sensors.getDeviceCount();
   // Present all sensors to controller
   for (int i = 0; i < numSensors && i < MAX_ATTACHED_DS18B20; i++) {
     present(20 + i, S_TEMP);
@@ -213,7 +210,7 @@ void loop()
   unsigned long currentTime = millis();
 
   // Only send values at a maximum frequency or woken up from sleep
-  if (SLEEP_MODE || (currentTime - lastSend > SEND_FREQUENCY))
+  if (currentTime - lastSend > SEND_FREQUENCY)
   {
     lastSend = currentTime;
 
@@ -223,7 +220,7 @@ void loop()
       return;
     }
 
-    if (!SLEEP_MODE && flow != oldflow) {
+    if (flow != oldflow) {
       oldflow = flow;
 #ifdef MY_DEBUG_LOCAL
       Serial.print("l/min:");
@@ -242,7 +239,7 @@ void loop()
     }
 
     // Pulse count has changed
-    if ((pulseCount != oldPulseCount) || (!SLEEP_MODE)) {
+    if (pulseCount != oldPulseCount) {
       oldPulseCount = pulseCount;
 #ifdef MY_DEBUG_LOCAL
       Serial.print("pulsecnt:");
@@ -251,7 +248,7 @@ void loop()
       send(lastCounterMsg.set(pulseCount));                  // Send  pulsecount value to gw in VAR1
 
       double volume = ((double)pulseCount / ((double)PULSE_FACTOR));
-      if ((volume != oldvolume) || (!SLEEP_MODE)) {
+      if (volume != oldvolume) {
         oldvolume = volume;
 #ifdef MY_DEBUG_LOCAL
         Serial.print("vol:");
@@ -262,19 +259,17 @@ void loop()
     }
   }
 
-  // Fetch temperatures from Dallas sensors
-  sensors.requestTemperatures();
-
-  // sleep() call can be replaced by wait() call if node need to process incoming messages (or if node is repeater)
-  wait(conversionTime);
-
   //Loop for quick temperature rise hot water and check for higher temperaturess of water exiting burner
   unsigned long currentMillisShort = millis();
   if (currentMillisShort - lastCheckWater > tempDelayShort) {
+    // Fetch temperatures from Dallas sensors
+    sensors.requestTemperatures();
+    wait(conversionTime);
+
     // Fetch and round temperature to one decimal
     float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[WW]) : sensors.getTempF(dallasAddresses[WW])) * 10.)) / 10.;
     // switch Relay on, if temperature on warmwater pipe rises fast and temperature at circlepump is not already at upper level
-    if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperatureShort[WW] + 0.3 < temperature && temperature != -127.00 && lastTemperature[WW] < tempMaxPump) {
+    if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperatureShort[WW] + 0.2 < temperature && temperature != -127.00 && lastTemperatureShort[WP] < tempMaxPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(WW + 20).set(temperature, 1));
       digitalWrite(RELAY_PIN, RELAY_ON);
@@ -286,11 +281,13 @@ void loop()
       Serial.print("C, Rel. status: ON");
       Serial.println();
 #endif
-      lastTemperatureShort[WW] = temperature;
     }
+    lastTemperatureShort[WW] = temperature;
+    lastCheckWater = currentMillisShort;
+
     // Fetch and round temperature to one decimal
     temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[HP]) : sensors.getTempF(dallasAddresses[HP])) * 10.)) / 10.;
-    // switch Relay on, if temperature on warmwater pipe rises fast and temperature at circlepump is not already at upper level
+    // switch heating pump to max, if temperature at exit of burner is above warning level
     if (val > 20 && temperature != -127.00 && temperature > tempMaxHeatingPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(HP + 20).set(temperature, 1));
@@ -298,7 +295,8 @@ void loop()
       attachedServo = true;
       int val = 20;
       myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
-
+      send(ServoMsg.set(val), true);
+      timeOfLastChange = millis();
       // Write some debug info
 #ifdef MY_DEBUG_LOCAL
       Serial.print("Int. change:");
@@ -309,7 +307,6 @@ void loop()
 #endif
       lastTemperatureShort[HP] = temperature;
     }
-    lastCheckWater = currentMillisShort;
   }
 
   //Loop for switching off circle pump
@@ -417,7 +414,6 @@ void loop()
 #else
       if (temperature != -127.00 && temperature != 85.00) {
 #endif
-
         // Send in the new temperature
         send(DallasMsg.setSensor(i + 20).set(temperature, 1));
         // Save new temperatures for next compare
@@ -425,9 +421,6 @@ void loop()
         lastTempAll = currentMillis;
       }
     }
-  }
-  if (SLEEP_MODE) {
-    sleep(SEND_FREQUENCY);
   }
 }
 
@@ -460,6 +453,7 @@ void receive(const MyMessage &message) {
       myservo.detach();
       attachedServo = false;
     }
+    timeOfLastChange = millis();
   }
   else if (message.sensor == CHILD_ID_GAS) {
     if (message.type == V_VAR1) {
@@ -495,7 +489,6 @@ void receive(const MyMessage &message) {
       int tempMaxHeatingPump = message.getInt(); //temperature to switch internal heating pump to highest level
     }
   }
-  timeOfLastChange = millis();
 }
 
 void onPulse()

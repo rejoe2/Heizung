@@ -53,8 +53,6 @@
 #include <DallasTemperature.h>
 #include <OneWire.h>
 
-#define COMPARE_TEMP 1 // Send temperature only if changed? 1 = Yes 0 = No
-
 #define ONE_WIRE_BUS 5 // Pin where dallas sensor is connected 
 #define MAX_ATTACHED_DS18B20 8
 unsigned long SLEEP_TIME = 300000; // Sleep time between reads (in milliseconds)
@@ -90,8 +88,9 @@ int WW = 1; //binary # of warmwater sensor
 int WP = 2; //WarmWater Pump
 int RL = 3; //Rücklauf
 int VL = 4; //Vorlauf
-int AN = 5; //Außentemperatur Nord
-float lastTemperatureShort[MAX_ATTACHED_DS18B20];
+int AN = 5; //Aussentemperatur Nord
+int AS = 6; //Aussentemperatur Sued
+int TS = 7; //Schidkroeten
 
 #define CHILD_ID_CONFIG 102   // Id of the sensor child
 
@@ -184,7 +183,7 @@ void before() {
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("Heating Environment", "0.9");
+  sendSketchInfo("Heating Environment", "0.95");
   // Register all sensors to gw (they will be created as child devices)
   present(CHILD_ID_SERVO, S_COVER);
   present(CHILD_ID_GAS, S_WATER);
@@ -273,7 +272,7 @@ void loop()
     // Fetch and round temperature to one decimal
     float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[WW]) : sensors.getTempF(dallasAddresses[WW])) * 10.)) / 10.;
     // switch Relay on, if temperature on warmwater pipe rises fast and temperature at circlepump is not already at upper level
-    if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperatureShort[WW] + 0.2 < temperature && temperature != -127.00 && lastTemperatureShort[WP] < tempMaxPump) {
+    if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperature[WW] + 0.2 < temperature && temperature != -127.00 && lastTemperature[WP] < tempMaxPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(WW + 20).set(temperature, 1));
       digitalWrite(RELAY_PIN, RELAY_ON);
@@ -286,7 +285,7 @@ void loop()
       Serial.println();
 #endif
     }
-    lastTemperatureShort[WW] = temperature;
+    lastTemperature[WW] = temperature;
     lastCheckWater = currentMillisShort;
 
     // Fetch and round temperature to one decimal
@@ -297,7 +296,7 @@ void loop()
     if (val > 20 && temperature != -127.00 && temperature > tempMaxHeatingPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(HP + 20).set(temperature, 1));
-      val = 20;
+	  val = 20;
       internalServo(val);
       // Write some debug info
 #ifdef MY_DEBUG_LOCAL
@@ -308,7 +307,7 @@ void loop()
       Serial.println();
 #endif
     }
-    lastTemperatureShort[HP] = temperature;
+    lastTemperature[HP] = temperature;
   }
 
   //Loop for switching off circle pump
@@ -329,7 +328,7 @@ void loop()
       Serial.println();
 #endif
     }
-    lastTemperatureShort[WP] = temperature;
+    lastTemperature[WP] = temperature;
     lastCheckPump = currentMillisPump;
   }
 
@@ -349,10 +348,10 @@ void loop()
       Serial.print("Int. change:");
       Serial.println(temperature);
 #endif
-      lastTemperatureShort[AN] = temperature;
+      lastTemperature[AN] = temperature;
       lastPumpSwitch = currentMillisHeatingPump;
 
-    } else if (val != 60 && tempLowExtToLevelII - 0.5 > temperature && lastTemperatureShort[HP] < tempMaxHeatingPump && temperature != -127.00 ) {
+    } else if (val != 60 && tempLowExtToLevelII - 0.5 > temperature && lastTemperature[HP] < tempMaxHeatingPump && temperature != -127.00 ) {
       val = 60;
       internalServo(val);
       // Send in the new temperature
@@ -362,10 +361,10 @@ void loop()
       Serial.print("Int. change:");
       Serial.println(temperature);
 #endif
-      lastTemperatureShort[AN] = temperature;
+      lastTemperature[AN] = temperature;
       lastPumpSwitch = currentMillisHeatingPump;
 
-    } else if (val < 100 && tempLowExtToLevelII + 0.5 < temperature && lastTemperatureShort[HP] < tempMaxHeatingPump && temperature != -127.00 ) {
+    } else if (val < 100 && tempLowExtToLevelII + 0.5 < temperature && lastTemperature[HP] < tempMaxHeatingPump && temperature != -127.00 ) {
       val = 100;
       internalServo(val);
       // Send in the new temperature
@@ -375,7 +374,7 @@ void loop()
       Serial.print("Int. change:");
       Serial.println(temperature);
 #endif
-      lastTemperatureShort[AN] = temperature;
+      lastTemperature[AN] = temperature;
       lastPumpSwitch = currentMillisHeatingPump;
 
     }
@@ -432,8 +431,8 @@ void loop()
         float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[i]) : sensors.getTempF(dallasAddresses[i])) * 10.)) / 10.;
         //float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric?sensors.getTempCByIndex(i):sensors.getTempFByIndex(i)) * 10.)) / 10.;
 
-        // Only send data if temperature has changed and no error
-        if (lastTemperature[i] != temperature && temperature != -127.00 && temperature != 85.00) {
+        // Only send data if temperature has no error
+        if ( temperature != -127.00 && temperature != 85.00) {
           // Send in the new temperature
           send(DallasMsg.setSensor(i + 20).set(temperature, 1));
           // Save new temperatures for next compare

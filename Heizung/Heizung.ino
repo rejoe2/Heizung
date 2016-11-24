@@ -297,6 +297,7 @@ void loop()
     if (val > 20 && temperature != -127.00 && temperature > tempMaxHeatingPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(HP + 20).set(temperature, 1));
+      val = 20;
       internalServo(val);
       // Write some debug info
 #ifdef MY_DEBUG_LOCAL

@@ -381,9 +381,8 @@ void loop()
 #endif
       lastTemperature[AN] = temperature;
       lastPumpSwitch = currentMillisHeatingPump;
-
     }
-
+  }
     /*Ideas for advanced features
 
       (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] > DeltaL3 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
@@ -424,37 +423,35 @@ void loop()
       }
 
       lastCheckHeatingPump = currentMillisHeatingPump;
-      }
-    */
-    //Loop for regular temperature sensing
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastTempAll > SLEEP_TIME) {
-      // Read temperatures and send them to controller
-      for (int i = 0; i < MAX_ATTACHED_DS18B20; i++) { //i < numSensors &&
-
-        // Fetch and round temperature to one decimal
-        float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[i]) : sensors.getTempF(dallasAddresses[i])) * 10.)) / 10.;
-        //float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric?sensors.getTempCByIndex(i):sensors.getTempFByIndex(i)) * 10.)) / 10.;
-
-        // Only send data if temperature has no error
-        if ( temperature != -127.00 && temperature != 85.00) {
-          // Send in the new temperature
-          send(DallasMsg.setSensor(i + 20).set(temperature, 1));
-          // Save new temperatures for next compare
-          lastTemperature[i] = temperature;
-          wait(30);
-#ifdef MY_DEBUG_LOCAL
-          // Write some debug info
-          Serial.print("Temperature ");
-          Serial.print(i);
-          Serial.print(" : ");
-          Serial.println(temperature);
-#endif
-
-        }
-      }
-      lastTempAll = currentMillis;
     }
+    */
+  //Loop for regular temperature sensing
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastTempAll > SLEEP_TIME) {
+    // Read temperatures and send them to controller
+    for (int i = 0; i < MAX_ATTACHED_DS18B20; i++) { //i < numSensors &&
+
+      // Fetch and round temperature to one decimal
+      float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[i]) : sensors.getTempF(dallasAddresses[i])) * 10.)) / 10.;
+      //float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric?sensors.getTempCByIndex(i):sensors.getTempFByIndex(i)) * 10.)) / 10.;
+
+      // Only send data if temperature has no error
+      if ( temperature != -127.00 && temperature != 85.00) {
+        // Send in the new temperature
+        send(DallasMsg.setSensor(i + 20).set(temperature, 1));
+        // Save new temperatures for next compare
+        lastTemperature[i] = temperature;
+        wait(30);
+#ifdef MY_DEBUG_LOCAL
+        // Write some debug info
+        Serial.print("Temperature ");
+        Serial.print(i);
+        Serial.print(" : ");
+        Serial.println(temperature);
+#endif
+      }
+    }
+    lastTempAll = currentMillis;
   }
 }
 void receive(const MyMessage & message) {
@@ -534,7 +531,7 @@ void receive(const MyMessage & message) {
   }
   else if (message.sensor == CHILD_ID_CONFIG0) {
     if (message.type == V_VAR1) {
-      int autoMode = message.getBool(); //enable autoMod
+      int autoMode = message.getBool(); //enable autoMode
     }
   }
 }

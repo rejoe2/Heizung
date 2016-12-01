@@ -1,34 +1,13 @@
 /**
-   The MySensors Arduino library handles the wireless radio link and protocol
-   between your home built sensors/actuators and HA controller of choice.
-   The sensors forms a self healing radio network with optional repeaters. Each
-   repeater and gateway builds a routing tables in EEPROM which keeps track of the
-   network topology allowing messages to be routed to nodes.
-
-   Created by Henrik Ekblad <henrik.ekblad@mysensors.org>
-   Copyright (C) 2013-2015 Sensnology AB
-   Full contributor list: https://github.com/mysensors/Arduino/graphs/contributors
-
-   Documentation: http://www.mysensors.org
-   Support Forum: http://forum.mysensors.org
-
-   This program is free software; you can redistribute it and/or
-   modify it under the terms of the GNU General Public License
-   version 2 as published by the Free Software Foundation.
-
- *******************************
-
-   REVISION HISTORY
-   Version 1.0 - Henrik Ekblad
-   Contribution by: Derek Macias
-
-   DESCRIPTION
-   Example showing how to create an atuator for a servo.
-   Connect red to +5V, Black or brown to GND and the last cable to Digital pin 3.
-   The servo consumes much power and should probably have its own powersource.'
-   The arduino might spontanally restart if too much power is used (happend
-   to me when servo tried to pass the extreme positions = full load).
-   http://www.mysensors.org/build/servo
+Baustein zur Überwachung und Steuerung der Heizung
+Konfiguration: 
+- ID 0, V_VAR1: autoMode = 0; 0=Manual Mode, 1=Switch internal pump automatically according to external and internal temperatures
+- ID 102:
+-- V_VAR1: tempMaxPump = 45 = upper temp level at warmwater circulation; pump will be switched off if higher temp is measured  
+-- V_VAR2: tempMaxHeatingPump = 65 = emergency temperature to switch internal heating pump to highest level
+-- V_VAR3: tempLowExtToLevelIII = -8 = External low temperature to switch internal heating pump to highest level
+-- V_VAR4: tempLowExtToLevelII = 7 = External highest temperature to switch internal heating pump from lowest to medium level; Hysteresis for level I/II: +/- 0,5 degree
+-- V_VAR5: lastPumpSwitch = if true: Reset timer (Heartbeat functionality) for autoMode to prevent automatic switches for the next hour
 */
 
 // Enable debug prints to serial monitor
@@ -94,7 +73,7 @@ int TS = 7; //Schidkroeten
 
 #define CHILD_ID_CONFIG 102   // Id for the temp-settings
 #define CHILD_ID_CONFIG0 0   // Id for automatic mode
-bool autoMode = 0;
+bool autoMode = 0; //0=Manual Mode, 1=Switch internal pump automatically according to external and internal temperatures
 
 #define SERVO_DIGITAL_OUT_PIN 4
 #define SERVO_MIN 0 // Fine tune your servos min. 0-180
@@ -154,7 +133,7 @@ int tempMaxPump = 45; //upper temp level at warmwater circle pump
 int tempMaxHeatingPump = 65; //temperature to switch internal heating pump to highest level
 int tempLowExtToLevelIII = -8; //External low temperature to switch internal heating pump to highest level
 int tempLowExtToLevelII = 7; ////External highest temperature to switch internal heating pump to medium level
-int val = 60;
+int val = 2;
 
 
 int oldValue = 0;

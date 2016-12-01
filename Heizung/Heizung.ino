@@ -43,9 +43,9 @@
 // Enabled repeater feature for this node
 #define MY_REPEATER_FEATURE
 #define MY_NODE_ID 102
-//#define MY_TRANSPORT_RELAXED //activate as soon as pull request is merged use the following two lines:
-#define MY_TRANSPORT_DONT_CARE_MODE
-#define MY_PARENT_NODE_ID 0
+#define MY_TRANSPORT_RELAXED //activate as soon as pull request is merged use the following two lines:
+//#define MY_TRANSPORT_DONT_CARE_MODE
+//#define MY_PARENT_NODE_ID 0
 
 #include <MySensors.h>
 #include <SPI.h>
@@ -92,7 +92,9 @@ int AN = 5; //Aussentemperatur Nord
 int AS = 6; //Aussentemperatur Sued
 int TS = 7; //Schidkroeten
 
-#define CHILD_ID_CONFIG 102   // Id of the sensor child
+#define CHILD_ID_CONFIG 102   // Id for the temp-settings
+#define CHILD_ID_CONFIG0 0   // Id for automatic mode
+bool autoMode = 0;
 
 #define SERVO_DIGITAL_OUT_PIN 4
 #define SERVO_MIN 0 // Fine tune your servos min. 0-180
@@ -183,12 +185,14 @@ void before() {
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("Heating Environment", "0.95");
+  sendSketchInfo("Heating Environment", "0.96");
   // Register all sensors to gw (they will be created as child devices)
   present(CHILD_ID_SERVO, S_COVER);
   present(CHILD_ID_GAS, S_WATER);
   present(CHILD_ID_RELAY, S_LIGHT);
   present(CHILD_ID_CONFIG, S_CUSTOM);
+  present(CHILD_ID_CONFIG0, S_CUSTOM); //for automatic mode
+
 
   // Present all sensors to controller
   for (int i = 0; i < MAX_ATTACHED_DS18B20; i++) { //i < numSensors &&
@@ -207,6 +211,7 @@ void setup() {
   request(CHILD_ID_CONFIG, V_VAR2);
   request(CHILD_ID_CONFIG, V_VAR3);
   request(CHILD_ID_CONFIG, V_VAR4);
+  request(CHILD_ID_CONFIG0, V_VAR1);
   lastSend = lastPulse = lastCheckWater = lastCheckPump = lastCheckHeatingPump = lastTempAll = millis();
 }
 
@@ -293,10 +298,10 @@ void loop()
 
     //Emergency switching function heating pump
     //switch heating pump to max, if temperature at exit of burner is above warning level
-    if (val > 20 && temperature != -127.00 && temperature > tempMaxHeatingPump) {
+    if (val < 3 && temperature != -127.00 && temperature > tempMaxHeatingPump) {
       // Send in the new temperature
       send(DallasMsg.setSensor(HP + 20).set(temperature, 1));
-	  val = 20;
+      val = 3;
       internalServo(val);
       // Write some debug info
 #ifdef MY_DEBUG_LOCAL
@@ -334,12 +339,12 @@ void loop()
 
   //Regular Loop for switching internal heating pump
   unsigned long currentMillisHeatingPump = millis();
-  if (currentMillisHeatingPump - lastPumpSwitch > tempDelayHeatingPump ) {
+  if (currentMillisHeatingPump - lastPumpSwitch > tempDelayHeatingPump && autoMode) {
     float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric ? sensors.getTempC(dallasAddresses[AN]) : sensors.getTempF(dallasAddresses[AN])) * 10.)) / 10.;
     // switch pump to Level 3, if external temperature is below minimum level
 
-    if (val > 20 && tempLowExtToLevelIII > temperature && temperature != -127.00 ) {
-      val = 20;
+    if (val < 3 && tempLowExtToLevelIII > temperature && temperature != -127.00 ) {
+      val = 3;
       internalServo(val);
       // Send in the new temperature
       send(DallasMsg.setSensor(AN + 20).set(temperature, 1));
@@ -351,8 +356,8 @@ void loop()
       lastTemperature[AN] = temperature;
       lastPumpSwitch = currentMillisHeatingPump;
 
-    } else if (val != 60 && tempLowExtToLevelII - 0.5 > temperature && lastTemperature[HP] < tempMaxHeatingPump && temperature != -127.00 ) {
-      val = 60;
+    } else if (val != 2 && tempLowExtToLevelII - 0.5 > temperature && lastTemperature[HP] < tempMaxHeatingPump - 5 && temperature != -127.00 ) {
+      val = 2;
       internalServo(val);
       // Send in the new temperature
       send(DallasMsg.setSensor(AN + 20).set(temperature, 1));
@@ -364,8 +369,8 @@ void loop()
       lastTemperature[AN] = temperature;
       lastPumpSwitch = currentMillisHeatingPump;
 
-    } else if (val < 100 && tempLowExtToLevelII + 0.5 < temperature && lastTemperature[HP] < tempMaxHeatingPump && temperature != -127.00 ) {
-      val = 100;
+    } else if (val > 1 && tempLowExtToLevelII + 0.5 < temperature && lastTemperature[HP] < tempMaxHeatingPump - 5 && temperature != -127.00 ) {
+      val = 1;
       internalServo(val);
       // Send in the new temperature
       send(DallasMsg.setSensor(AN + 20).set(temperature, 1));
@@ -461,7 +466,11 @@ void receive(const MyMessage & message) {
     }
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
-      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+      if (val > 3) {
+        val = 3;
+      };
+      //myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * (130 - val * 40)); // sets the servo position 0-180
       // Write some debug info
       //Serial.print("Servo change; state: ");
       //Serial.println(val);
@@ -523,7 +532,13 @@ void receive(const MyMessage & message) {
       }
     }
   }
+  else if (message.sensor == CHILD_ID_CONFIG0) {
+    if (message.type == V_VAR1) {
+      int autoMode = message.getBool(); //enable autoMod
+    }
+  }
 }
+
 void onPulse()
 {
   if (!SLEEP_MODE)
@@ -549,7 +564,8 @@ void internalServo(int val1)
 {
   myservo.attach(SERVO_DIGITAL_OUT_PIN);
   attachedServo = true;
-  myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val1); // sets the servo position 0-180
+  //myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val1); // sets the servo position 0-180
+  myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * (130 - val1 * 40)); // sets the servo position 0-180
   send(ServoMsg.set(val1), true);
   timeOfLastChange = millis();
 }

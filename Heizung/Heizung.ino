@@ -1,13 +1,13 @@
 /**
-Baustein zur Überwachung und Steuerung der Heizung
-Konfiguration: 
-- ID 0, V_VAR1: autoMode = 0; 0=Manual Mode, 1=Switch internal pump automatically according to external and internal temperatures
-- ID 102:
--- V_VAR1: tempMaxPump = 45 = upper temp level at warmwater circulation; pump will be switched off if higher temp is measured  
--- V_VAR2: tempMaxHeatingPump = 65 = emergency temperature to switch internal heating pump to highest level
--- V_VAR3: tempLowExtToLevelIII = -8 = External low temperature to switch internal heating pump to highest level
--- V_VAR4: tempLowExtToLevelII = 7 = External highest temperature to switch internal heating pump from lowest to medium level; Hysteresis for level I/II: +/- 0,5 degree
--- V_VAR5: lastPumpSwitch = if true: Reset timer (Heartbeat functionality) for autoMode to prevent automatic switches for the next hour
+  Baustein zur Überwachung und Steuerung der Heizung
+  Konfiguration:
+  - ID 0, V_VAR1: autoMode = 0; 0=Manual Mode, 1=Switch internal pump automatically according to external and internal temperatures
+  - ID 102:
+  -- V_VAR1: tempMaxPump = 45 = upper temp level at warmwater circulation; pump will be switched off if higher temp is measured
+  -- V_VAR2: tempMaxHeatingPump = 65 = emergency temperature to switch internal heating pump to highest level
+  -- V_VAR3: tempLowExtToLevelIII = -8 = External low temperature to switch internal heating pump to highest level
+  -- V_VAR4: tempLowExtToLevelII = 7 = External highest temperature to switch internal heating pump from lowest to medium level; Hysteresis for level I/II: +/- 0,5 degree
+  -- V_VAR5: lastPumpSwitch = if true: Reset timer (Heartbeat functionality) for autoMode to prevent automatic switches for the next hour
 */
 
 // Enable debug prints to serial monitor
@@ -134,7 +134,6 @@ int tempMaxHeatingPump = 65; //temperature to switch internal heating pump to hi
 int tempLowExtToLevelIII = -8; //External low temperature to switch internal heating pump to highest level
 int tempLowExtToLevelII = 7; ////External highest temperature to switch internal heating pump to medium level
 int val = 2;
-
 
 int oldValue = 0;
 bool state;
@@ -362,48 +361,48 @@ void loop()
       lastPumpSwitch = currentMillisHeatingPump;
     }
   }
-    /*Ideas for advanced features
+  /*Ideas for advanced features
 
-      (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] > DeltaL3 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
-      myservo.attach(SERVO_DIGITAL_OUT_PIN);
-      attachedServo = true;
-      val = 20;
-      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
-      send(ServoMsg.set(val), true); // Send new state and request ack back
-      // Write some debug info
-      Serial.print("Servo change; state: ");
-      Serial.println(val);
-      lastPumpSwitch = currentMillisHeatingPump;
-      timeOfLastChange = currentMillisHeatingPump;
-      } else if (lastTemperature[VL] - lastTemperature[RL] > DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
-      myservo.attach(SERVO_DIGITAL_OUT_PIN);
-      attachedServo = true;
-      val = 60;
-      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
-      send(ServoMsg.set(val), true); // Send new state and request ack back
-      // Write some debug info
-      Serial.print("Servo change; state: ");
-      Serial.println(val);
-      lastPumpSwitch = currentMillisHeatingPump;
-      timeOfLastChange = currentMillisHeatingPump;
+    (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] > DeltaL3 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
+    myservo.attach(SERVO_DIGITAL_OUT_PIN);
+    attachedServo = true;
+    val = 20;
+    myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+    send(ServoMsg.set(val), true); // Send new state and request ack back
+    // Write some debug info
+    Serial.print("Servo change; state: ");
+    Serial.println(val);
+    lastPumpSwitch = currentMillisHeatingPump;
+    timeOfLastChange = currentMillisHeatingPump;
+    } else if (lastTemperature[VL] - lastTemperature[RL] > DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
+    myservo.attach(SERVO_DIGITAL_OUT_PIN);
+    attachedServo = true;
+    val = 60;
+    myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+    send(ServoMsg.set(val), true); // Send new state and request ack back
+    // Write some debug info
+    Serial.print("Servo change; state: ");
+    Serial.println(val);
+    lastPumpSwitch = currentMillisHeatingPump;
+    timeOfLastChange = currentMillisHeatingPump;
 
-      } else if (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] < DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
-      myservo.attach(SERVO_DIGITAL_OUT_PIN);
-      attachedServo = true;
-      val = 100;
-      myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
-      send(ServoMsg.set(val), true); // Send new state and request ack back
-      // Write some debug info
-      Serial.print("Servo change; state: ");
-      Serial.println(val);
-      lastPumpSwitch = currentMillisHeatingPump;
-      timeOfLastChange = currentMillisHeatingPump;
+    } else if (lastTemperature[VL] > 30 && lastTemperature[VL] - lastTemperature[RL] < DeltaL2 && lastCheckHeatingPump - lastPumpSwitch > waitTimePumpSwitch) {
+    myservo.attach(SERVO_DIGITAL_OUT_PIN);
+    attachedServo = true;
+    val = 100;
+    myservo.write(SERVO_MAX + (SERVO_MIN - SERVO_MAX) / 100 * val); // sets the servo position 0-180
+    send(ServoMsg.set(val), true); // Send new state and request ack back
+    // Write some debug info
+    Serial.print("Servo change; state: ");
+    Serial.println(val);
+    lastPumpSwitch = currentMillisHeatingPump;
+    timeOfLastChange = currentMillisHeatingPump;
 
-      }
-
-      lastCheckHeatingPump = currentMillisHeatingPump;
     }
-    */
+
+    lastCheckHeatingPump = currentMillisHeatingPump;
+    }
+  */
   //Loop for regular temperature sensing
   unsigned long currentMillis = millis();
   if (currentMillis - lastTempAll > SLEEP_TIME) {
@@ -510,7 +509,7 @@ void receive(const MyMessage & message) {
   }
   else if (message.sensor == CHILD_ID_CONFIG0) {
     if (message.type == V_VAR1) {
-      int autoMode = message.getBool(); //enable autoMode
+      autoMode = message.getBool(); //enable autoMode
     }
   }
 }

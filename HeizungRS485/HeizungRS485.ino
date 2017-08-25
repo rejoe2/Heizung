@@ -33,7 +33,7 @@
 //#define MY_REPEATER_FEATURE
 #define MY_NODE_ID 102
 //#define MY_TRANSPORT_RELAXED
-#define MY_TRANSPORT_WAIT_READY_MS 3000
+#define MY_TRANSPORT_WAIT_READY_MS 15000
 #include <MySensors.h>
 #include <SPI.h>
 #include <PWMServo.h>
@@ -46,7 +46,7 @@
  * 11 = 
  * 12 = Warmwasser
  */
-#define MAX_ATTACHED_DS18B20 8
+#define MAX_ATTACHED_DS18B20 6
 unsigned long SLEEP_TIME = 300000; // Sleep time between reads (in milliseconds)
 unsigned long tempDelayShort = 10000; //Check cyclus for fast temperature rise
 unsigned long tempDelayPump = 30000; //Check cyclus for switching off warmwater circle pump
@@ -67,12 +67,12 @@ int  conversionTime = 1000;
 DeviceAddress dallasAddresses[] = {
   {0x28, 0xFF, 0x36, 0x98, 0x54, 0x14, 0x1, 0xC1}, // Sensor Internal Heating Pump
   {0x28, 0xF8, 0x24, 0xE5, 0x5, 0x0, 0x0, 0xD7}, // Warmwasser 28.F824E5050000.D7
-  {0x28, 0xF9, 0x61, 0xE7, 0x5, 0x0, 0x0, 0xDC}, //{0x28, 0xF8, 0x24, 0xE5, 0x05, 0x0, 0x0, 0xDC}, // Warmwasser an der Umwälzpumpe 28.F961E7050000.DC
+  {0x28, 0xF9, 0x61, 0xE7, 0x5, 0x0, 0x0, 0xDC}, // Warmwasser an der Umwälzpumpe 28.F961E7050000.DC
   {0x28, 0xFF, 0x0, 0x4A, 0x54, 0x14, 0x1, 0xDF}, // Heizung Rücklauf 28.FF004A541401.DF
   {0x28, 0xFF, 0xCE, 0x69, 0x36, 0x16, 0x4, 0xE3}, // Heizung Vorlauf 28FFCE69361604E3
   {0x28, 0xDC, 0x1A, 0xE6, 0x5, 0x0, 0x0, 0x13}, // Aussentemperatur Nord DC1AE6050000.13
-  {0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
-  {0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86*/
+//  {0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
+//  {0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86*/
 };
 
 int HP = 0; //Internal Heating Pump => [2] => PIN 12
@@ -81,8 +81,8 @@ int WP = 2; //WarmWater Pump => [1] => PIN 11
 int RL = 3; //Rücklauf => [0] => PIN 10
 int VL = 4; //Vorlauf => [0] => PIN 10
 int AN = 5; //Aussentemperatur Nord => [0] => PIN 10
-int AS = 6; //Aussentemperatur Sued => [0] => PIN 10
-int TS = 7; //Schidkroeten => [0] => PIN 10
+//int AS = 6; //Aussentemperatur Sued => [0] => PIN 10
+//int TS = 7; //Schidkroeten => [0] => PIN 10
 
 #define CHILD_ID_CONFIG 102   // Id for the temp-settings
 #define CHILD_ID_CONFIG0 0   // Id for automatic mode
@@ -183,7 +183,7 @@ void before() {
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("Heating Environment", "0.96");
+  sendSketchInfo("Heating Environment", "0.97");
   // Register all sensors to gw (they will be created as child devices)
   present(CHILD_ID_SERVO, S_COVER);
   present(CHILD_ID_GAS, S_WATER);

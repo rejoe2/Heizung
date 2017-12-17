@@ -11,7 +11,7 @@
 */
 
 // Enable debug prints to serial monitor
-#define MY_DEBUG
+//#define MY_DEBUG
 //#define MY_DEBUG_LOCAL
 
 // Enable and select radio type attached
@@ -26,13 +26,13 @@
 #define MY_RS485_DE_PIN 2
 
 // Set RS485 baud rate to use
-#define MY_RS485_BAUD_RATE 9600
-
+#define MY_RS485_BAUD_RATE 38400 //9600
+#define MY_RS485_SOH_COUNT 3
+#define MY_RS485_HWSERIAL Serial
 
 // Enabled repeater feature for this node
 //#define MY_REPEATER_FEATURE
 #define MY_NODE_ID 102
-//#define MY_TRANSPORT_RELAXED
 #define MY_TRANSPORT_WAIT_READY_MS 15000
 #include <MySensors.h>
 #include <SPI.h>
@@ -195,9 +195,6 @@ void presentation()  {
   for (int i = 0; i < MAX_ATTACHED_DS18B20; i++) { //i < numSensors &&
     present(20 + i, S_TEMP);
   }
-}
-
-void setup() {
   // Request last servo state at startup
   request(CHILD_ID_SERVO, V_DIMMER);
   // Fetch last known pulse count value from gw
@@ -207,6 +204,9 @@ void setup() {
   request(CHILD_ID_CONFIG, V_VAR3);
   request(CHILD_ID_CONFIG, V_VAR4);
   request(CHILD_ID_CONFIG0, V_VAR1);
+}
+
+void setup() {
   lastSend = lastPulse = lastCheckWater = lastCheckPump = lastCheckHeatingPump = lastTempAll = millis();
 }
 
@@ -222,6 +222,9 @@ void loop()
   // Only send values at a maximum frequency or woken up from sleep
   if (currentTime - lastSend > SEND_FREQUENCY)
   {
+     if (!pcReceived) {
+        request(CHILD_ID_GAS, V_VAR1);
+      }
     lastSend = currentTime;
     if (flow != oldflow) {
       oldflow = flow;
@@ -442,7 +445,7 @@ void loop()
           send(DallasMsg.setSensor(i + 20).set(temperature, 1));
           // Save new temperatures for next compare
           lastTemperature[i] = temperature;
-          //wait(40);
+          wait(40);
 #ifdef MY_DEBUG_LOCAL
           // Write some debug info
           Serial.print("Temperature ");
@@ -455,9 +458,11 @@ void loop()
     }
     //Send remaining Temps?
     send(DallasMsg.setSensor(WP + 20).set(lastTemperature[WP], 1));
+    wait(40);
     send(DallasMsg.setSensor(WW + 20).set(lastTemperature[WW], 1));
+    wait(40);
     send(DallasMsg.setSensor(HP + 20).set(lastTemperature[HP], 1));
-    lastTempAll = currentMillis;
+    lastTempAll = millis(); //currentMillis;
   }
 }
 
@@ -483,9 +488,13 @@ void receive(const MyMessage & message) {
   }
   else if (message.sensor == CHILD_ID_GAS) {
     if (message.type == V_VAR1) {
-      pulseCount = message.getULong();
-      flow = oldflow = 0;
-      //Serial.print("Rec. last pulse count from gw:");
+      if (pcReceived){
+        pulseCount = message.getULong();
+        flow = oldflow = 0;
+      } else {
+        pulseCount = pulseCount+message.getULong();
+      }
+//Serial.print("Rec. last pulse count from gw:");
       //Serial.println(pulseCount);
       pcReceived = true;
     }

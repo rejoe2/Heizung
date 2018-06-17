@@ -21,18 +21,20 @@
 
 // Enable RS485 transport layer
 #define MY_RS485
+#define MY_RS485_SEND_DELAY 60
 
 // Define this to enables DE-pin management on defined pin
-#define MY_RS485_DE_PIN 2
+//#define MY_RS485_DE_PIN 2
 
 // Set RS485 baud rate to use
-#define MY_RS485_BAUD_RATE 38400 //9600
-#define MY_RS485_SOH_COUNT 3
+#define MY_RS485_BAUD_RATE 19200 //57600 //38400 //9600
+//#define MY_RS485_SOH_COUNT 3
 #define MY_RS485_HWSERIAL Serial
+#define MY_SPLASH_SCREEN_DISABLED
 
 // Enabled repeater feature for this node
 //#define MY_REPEATER_FEATURE
-#define MY_NODE_ID 102
+#define MY_NODE_ID 96
 #define MY_TRANSPORT_WAIT_READY_MS 15000
 #include <MySensors.h>
 #include <SPI.h>
@@ -41,18 +43,18 @@
 #include <OneWire.h>
 
 //#define ONE_WIRE_BUS[3]
-//const uint8_t oneWirePins[3]= {10,11,12}; // Pin where dallas sensor is connected 
-/* 10 = 
- * 11 = 
- * 12 = Warmwasser
- */
-#define MAX_ATTACHED_DS18B20 6
+//const uint8_t oneWirePins[3]= {10,11,12}; // Pin where dallas sensor is connected
+/* 10 =
+   11 =
+   12 = Warmwasser
+*/
+#define MAX_ATTACHED_DS18B20 8
 unsigned long SLEEP_TIME = 300000; // Sleep time between reads (in milliseconds)
 unsigned long tempDelayShort = 10000; //Check cyclus for fast temperature rise
 unsigned long tempDelayPump = 30000; //Check cyclus for switching off warmwater circle pump
 unsigned long tempDelayHeatingPump = 45000; //Check cyclus for switching internal heating water pump
 
-OneWire oneWire[3] = {10,11,12}; //{oneWirePins[]}; // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+OneWire oneWire[3] = {10, 11, 12}; //{oneWirePins[]}; // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 DallasTemperature sensors[3]; // Pass the oneWire reference to Dallas Temperature.
 float lastTemperature[MAX_ATTACHED_DS18B20];
 //int numSensors = 0;
@@ -71,8 +73,11 @@ DeviceAddress dallasAddresses[] = {
   {0x28, 0xFF, 0x0, 0x4A, 0x54, 0x14, 0x1, 0xDF}, // Heizung Rücklauf 28.FF004A541401.DF
   {0x28, 0xFF, 0xCE, 0x69, 0x36, 0x16, 0x4, 0xE3}, // Heizung Vorlauf 28FFCE69361604E3
   {0x28, 0xDC, 0x1A, 0xE6, 0x5, 0x0, 0x0, 0x13}, // Aussentemperatur Nord DC1AE6050000.13
-//  {0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
-//  {0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86*/
+  {0x28, 0xFF, 0x8A, 0x8B, 0x54, 0x14, 0x1, 0x1F}, //Rücklauf SZ
+  {0x28, 0xFF, 0x7C, 0x3E, 0x54, 0x14, 0x1, 0x35}// Vorlauf SZ
+  
+  //  {0x28, 0x28, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x8A}, // Aussentemperatur Süd 28.286FE5050000.8A
+  //  {0x28, 0x42, 0x6F, 0xE5, 0x5, 0x0, 0x0, 0x86} // Schildkröten 28.426FE5050000.86*/
 };
 
 int HP = 0; //Internal Heating Pump => [2] => PIN 12
@@ -167,15 +172,15 @@ void before() {
 
   conversionTime = 750 / (1 << (12 - resolution));
   // Startup up the OneWire library
-  for (uint8_t i=0; i<3; i++) {
+  for (uint8_t i = 0; i < 3; i++) {
     sensors[i].setOneWire(&oneWire[i]);
     sensors[i].begin();
 
-  // requestTemperatures() will not block current thread
+    // requestTemperatures() will not block current thread
     sensors[i].setWaitForConversion(false);
 
     // Fetch the number of attached temperature sensors and set resolution
-    for (uint8_t j=0; j < sensors[i].getDeviceCount(); j++) {
+    for (uint8_t j = 0; j < sensors[i].getDeviceCount(); j++) {
       sensors[i].setResolution(j, resolution);
     }
   }
@@ -183,17 +188,17 @@ void before() {
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("Heating Environment", "0.97");
+  sendSketchInfo("Heating Environment", "0.98");
   // Register all sensors to gw (they will be created as child devices)
-  present(CHILD_ID_SERVO, S_COVER);
-  present(CHILD_ID_GAS, S_WATER);
-  present(CHILD_ID_RELAY, S_LIGHT);
-  present(CHILD_ID_CONFIG, S_CUSTOM);
-  present(CHILD_ID_CONFIG0, S_CUSTOM); //for automatic mode
+  present(CHILD_ID_SERVO, S_COVER); wait(MY_RS485_SEND_DELAY);
+  present(CHILD_ID_GAS, S_WATER); wait(MY_RS485_SEND_DELAY);
+  present(CHILD_ID_RELAY, S_LIGHT); wait(MY_RS485_SEND_DELAY);
+  present(CHILD_ID_CONFIG, S_CUSTOM); wait(MY_RS485_SEND_DELAY);
+  present(CHILD_ID_CONFIG0, S_CUSTOM); //for automatic modewait(MY_RS485_SEND_DELAY);
 
   // Present all sensors to controller
   for (int i = 0; i < MAX_ATTACHED_DS18B20; i++) { //i < numSensors &&
-    present(20 + i, S_TEMP);
+    present(20 + i, S_TEMP); wait(MY_RS485_SEND_DELAY);
   }
   // Request last servo state at startup
   request(CHILD_ID_SERVO, V_DIMMER);
@@ -208,6 +213,7 @@ void presentation()  {
 
 void setup() {
   lastSend = lastPulse = lastCheckWater = lastCheckPump = lastCheckHeatingPump = lastTempAll = millis();
+  wait(15000);
 }
 
 void loop()
@@ -218,13 +224,13 @@ void loop()
     myservo.detach();
     attachedServo = false;
   }
-  
+
   // Only send values at a maximum frequency or woken up from sleep
   if (currentTime - lastSend > SEND_FREQUENCY)
   {
-     if (!pcReceived) {
-        request(CHILD_ID_GAS, V_VAR1);
-      }
+    if (!pcReceived) {
+      request(CHILD_ID_GAS, V_VAR1);
+    }
     lastSend = currentTime;
     if (flow != oldflow) {
       oldflow = flow;
@@ -236,6 +242,7 @@ void loop()
       // could hapen when long wraps or false interrupt triggered
       if (flow < ((unsigned long)MAX_FLOW)) {
         send(flowMsg.set(flow, 2));                   // Send flow value to gw
+        wait(MY_RS485_SEND_DELAY);
       }
     }
 
@@ -252,7 +259,7 @@ void loop()
       Serial.println(pulseCount);
 #endif
       send(lastCounterMsg.set(pulseCount));                  // Send  pulsecount value to gw in VAR1
-
+      wait(MY_RS485_SEND_DELAY);
       double volume = ((double)pulseCount / ((double)PULSE_FACTOR));
       if (volume != oldvolume) {
         oldvolume = volume;
@@ -275,12 +282,13 @@ void loop()
     // Fetch and round temperature to one decimal
     float temperature = static_cast<float>(static_cast<int>(sensors[2].getTempC(dallasAddresses[WW]) * 10.)) / 10.;
     // switch Relay on, if temperature on warmwater pipe rises fast and temperature at circlepump is not already at upper level
-    
+
     if (digitalRead(RELAY_PIN) != RELAY_ON && lastTemperature[WW] + 0.2 < temperature && temperature != -127.00 && temperature != 85.00 && lastTemperature[WP] < tempMaxPump) {
       // Send in the new temperature
-      send(DallasMsg.setSensor(WW + 20).set(temperature, 1));
+      send(DallasMsg.setSensor(WW + 20).set(temperature, 1)); wait(MY_RS485_SEND_DELAY);
       digitalWrite(RELAY_PIN, RELAY_ON);
       send(RelayMsg.set(true)); // Send new state and request ack back
+      wait(MY_RS485_SEND_DELAY);
       // Write some debug info
 #ifdef MY_DEBUG
       Serial.print("Int. change:");
@@ -325,7 +333,9 @@ void loop()
       // Send in the new temperature
       send(DallasMsg.setSensor(WP + 20).set(temperature, 1));
       digitalWrite(RELAY_PIN, RELAY_OFF);
+      wait(MY_RS485_SEND_DELAY);
       send(RelayMsg.set(false)); // Send new state
+      wait(MY_RS485_SEND_DELAY);
 #ifdef MY_DEBUG_LOCAL
       // Write some debug info
       Serial.print("Int. change:");
@@ -436,33 +446,33 @@ void loop()
 
       // Fetch and round temperature to one decimal
       //if (sensors[0].getAddress(dallasAddresses[i], 0)) {
-        float temperature = static_cast<float>(static_cast<int>(sensors[0].getTempC(dallasAddresses[i]) * 10.)) / 10.;
-        //float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric?sensors.getTempCByIndex(i):sensors.getTempFByIndex(i)) * 10.)) / 10.;
+      float temperature = static_cast<float>(static_cast<int>(sensors[0].getTempC(dallasAddresses[i]) * 10.)) / 10.;
+      //float temperature = static_cast<float>(static_cast<int>((getConfig().isMetric?sensors.getTempCByIndex(i):sensors.getTempFByIndex(i)) * 10.)) / 10.;
 
-        // Only send data if temperature has no error
-        if ( temperature != -127.00 && temperature != 85.00) {
-          // Send in the new temperature
-          send(DallasMsg.setSensor(i + 20).set(temperature, 1));
-          // Save new temperatures for next compare
-          lastTemperature[i] = temperature;
-          wait(40);
+      // Only send data if temperature has no error
+      if ( temperature != -127.00 && temperature != 85.00) {
+        // Send in the new temperature
+        send(DallasMsg.setSensor(i + 20).set(temperature, 1));
+        // Save new temperatures for next compare
+        lastTemperature[i] = temperature;
+        wait(MY_RS485_SEND_DELAY);
 #ifdef MY_DEBUG_LOCAL
-          // Write some debug info
-          Serial.print("Temperature ");
-          Serial.print(i);
-          Serial.print(" : ");
-          Serial.println(temperature);
+        // Write some debug info
+        Serial.print("Temperature ");
+        Serial.print(i);
+        Serial.print(" : ");
+        Serial.println(temperature);
 #endif
-        }
+      }
       //}
     }
     //Send remaining Temps?
     send(DallasMsg.setSensor(WP + 20).set(lastTemperature[WP], 1));
-    wait(40);
+    wait(MY_RS485_SEND_DELAY);
     send(DallasMsg.setSensor(WW + 20).set(lastTemperature[WW], 1));
-    wait(40);
+    wait(MY_RS485_SEND_DELAY);
     send(DallasMsg.setSensor(HP + 20).set(lastTemperature[HP], 1));
-    lastTempAll = millis(); //currentMillis;
+    lastTempAll = currentMillis;
   }
 }
 
@@ -488,13 +498,13 @@ void receive(const MyMessage & message) {
   }
   else if (message.sensor == CHILD_ID_GAS) {
     if (message.type == V_VAR1) {
-      if (pcReceived){
+      if (pcReceived) {
         pulseCount = message.getULong();
         flow = oldflow = 0;
       } else {
-        pulseCount = pulseCount+message.getULong();
+        pulseCount = pulseCount + message.getULong();
       }
-//Serial.print("Rec. last pulse count from gw:");
+      //Serial.print("Rec. last pulse count from gw:");
       //Serial.println(pulseCount);
       pcReceived = true;
     }
